@@ -1,0 +1,6 @@
+[package]
+name = "wismut"
+version = "0.1.0"
+authors = ["bismuth-party"]
+
+[dependencies]
