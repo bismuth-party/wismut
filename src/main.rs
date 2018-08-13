@@ -1,11 +1,13 @@
 extern crate clap;
 extern crate futures;
+extern crate hyper;
 extern crate telegram_bot;
 extern crate tokio_core;
 extern crate toml;
 
 use clap::{Arg, App};
 use futures::Stream;
+use hyper::{Method, Request};
 use std::fs::File;
 use std::io::prelude::*;
 use tokio_core::reactor::Core;
@@ -48,12 +50,13 @@ fn main() {
 
             if let MessageKind::Text {ref data, ..} = message.kind {
                 // Print received text message to stdout.
-                println!("<{}>: {}", &message.from.first_name, data);
+                handle_message(&message, data);
+
 
                 // Answer message with "Hi".
-                api.spawn(message.text_reply(
-                    format!("Hi, {}! You just wrote '{}'", &message.from.first_name, data)
-                ));
+                // api.spawn(message.text_reply(
+                //     format!("Hi, {}! You just wrote '{}'", &message.from.first_name, data)
+                // ));
             }
         }
 
@@ -71,4 +74,9 @@ fn load_config(config_path: &str) -> Option<Value> {
     f.read_to_string(&mut contents).expect("Something went wrong reading the file");
 
     return contents.as_str().parse::<Value>().ok();
+}
+
+
+fn handle_message(message: &Message, data: &str) {
+    println!("<{}>: {}", message.from.first_name, data);
 }
