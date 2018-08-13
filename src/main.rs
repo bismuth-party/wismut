@@ -25,7 +25,8 @@ fn main() {
             .takes_value(true))
        .get_matches();
 
-    let conf_path = matches.value_of("config").unwrap_or("config.toml");
+    let conf_path = matches.clone().value_of("config").unwrap_or("config.toml");
+    //let conf = load_config(conf_path);
     let conf = load_config();
     println!("{}", &conf["token"]);
 
