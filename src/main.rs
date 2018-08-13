@@ -5,7 +5,6 @@ extern crate tokio_core;
 extern crate toml;
 
 use clap::{Arg, App, SubCommand};
-use std::env;
 use futures::Stream;
 use std::fs::File;
 use std::io::prelude::*;
@@ -27,13 +26,12 @@ fn main() {
        .get_matches();
 
     let conf_path = matches.value_of("config").unwrap_or("config.toml");
-    let conf = load_config(conf_path);
-    println!("{}", conf["token"]);
+    let conf = load_config();
+    println!("{}", &conf["token"]);
 
     let mut core = Core::new().unwrap();
 
-    let token = env::var("[TOKEN]").unwrap();
-    let api = Api::configure(token).build(core.handle()).unwrap();
+    let api = Api::configure(&conf["token"].as_str().unwrap()).build(core.handle()).unwrap();
 
     // Fetch new updates via long poll method
     let future = api.stream().for_each(|update| {
@@ -58,8 +56,8 @@ fn main() {
     core.run(future).unwrap();
 }
 
-fn load_config(path: &'static str) -> Value {
-    let mut f = File::open(path).expect("No config found!");
+fn load_config() -> Value {
+    let mut f = File::open("config.toml").expect("No config found!");
 
     let mut contents = String::new();
     f.read_to_string(&mut contents).expect("something went wrong reading the file");
