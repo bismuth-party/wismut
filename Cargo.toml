@@ -2,6 +2,7 @@
 name = "wismut"
 version = "0.1.0"
 authors = ["bismuth-party"]
+description = "Telegram group statistics bot"
 
 [dependencies]
 clap = "2.32.0"
