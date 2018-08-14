@@ -1,13 +1,14 @@
 extern crate clap;
 extern crate futures;
 extern crate hyper;
+extern crate reqwest;
 extern crate telegram_bot;
 extern crate tokio_core;
 extern crate toml;
 
 use clap::{Arg, App};
 use futures::Stream;
-use hyper::{Method, Request};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
 use tokio_core::reactor::Core;
@@ -79,4 +80,20 @@ fn load_config(config_path: &str) -> Option<Value> {
 
 fn handle_message(message: &Message, data: &str) {
     println!("<{}>: {}", message.from.first_name, data);
+
+    // let mut map = HashMap::new();
+    // map.insert("chatid", message.chat.id);
+    // map.insert("userid", message.from.id);
+    // map.insert("message", data);
+
+    let mut map = HashMap::new();
+    map.insert("chatid", "1");
+    map.insert("userid", "2");
+    map.insert("message", "kaas");
+
+
+    let client = reqwest::Client::new();
+    let res = client.post("http://api.bismuth.party/abcdef/message")
+        .json(&map)
+        .send();
 }
