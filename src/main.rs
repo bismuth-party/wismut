@@ -2,12 +2,15 @@ extern crate clap;
 extern crate futures;
 extern crate hyper;
 extern crate reqwest;
+#[macro_use]
+extern crate serde_json;
 extern crate telegram_bot;
 extern crate tokio_core;
 extern crate toml;
 
 use clap::{Arg, App};
 use futures::Stream;
+use serde_json::{Value as SValue, Error};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
@@ -86,14 +89,36 @@ fn handle_message(message: &Message, data: &str) {
     // map.insert("userid", message.from.id);
     // map.insert("message", data);
 
-    let mut map = HashMap::new();
-    map.insert("chatid", "1");
-    map.insert("userid", "2");
-    map.insert("message", "kaas");
+    // let mut text = HashMap::new();
+    // text.insert("text", "kaas");
 
+    // let mut content = HashMap::new();
+    // content.insert("type", 0);
+    // content.insert("content", text);
+
+    println!("{}", message.chat.id());
+
+    let data = json!({
+        "chatid": message.chat.id(),
+        "userid": message.from.id,
+        "message": {
+            "type": 0,
+            "content": {
+                "text": data
+            }
+        }
+    });
+
+    let mut map = HashMap::new();
+    map.insert("chatid", 1);
+    map.insert("userid", 2);
+    map.insert("message", 1);
 
     let client = reqwest::Client::new();
     let res = client.post("http://api.bismuth.party/abcdef/message")
-        .json(&map)
-        .send();
+        .json(&data)
+        .send()
+        .unwrap();
+
+    println!("{:?}", res);
 }
