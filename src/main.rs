@@ -20,6 +20,7 @@ use toml::Value;
 
 
 fn main() {
+    // Clap CLI argument logic
     let matches = App::new(env!("CARGO_PKG_NAME"))
        .version(env!("CARGO_PKG_VERSION"))
        .about(env!("CARGO_PKG_DESCRIPTION"))
@@ -34,6 +35,7 @@ fn main() {
 
        .get_matches();
 
+    // Loading the config based on a given path or a fixed path
     let conf_path = matches.value_of("config").unwrap_or("config.toml");
     let conf = load_config(conf_path).unwrap();
 
@@ -55,6 +57,12 @@ fn main() {
             if let MessageKind::Text {ref data, ..} = message.kind {
                 // Print received text message to stdout.
                 handle_message(&message, data);
+
+                if data.as_str() == "/info" {
+                    api.spawn(message.text_reply(
+                        format!("userid: {}\nchatid: {}", &message.from.id, &message.chat.id())
+                    ));
+                }
 
 
                 // Answer message with "Hi".
@@ -108,11 +116,6 @@ fn handle_message(message: &Message, data: &str) {
             }
         }
     });
-
-    let mut map = HashMap::new();
-    map.insert("chatid", 1);
-    map.insert("userid", 2);
-    map.insert("message", 1);
 
     let client = reqwest::Client::new();
     let res = client.post("http://api.bismuth.party/abcdef/message")
