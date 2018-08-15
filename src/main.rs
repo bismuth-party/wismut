@@ -1,158 +1,228 @@
 extern crate clap;
 extern crate futures;
-extern crate hyper;
 extern crate reqwest;
 #[macro_use]
 extern crate serde_json;
 extern crate telegram_bot;
 extern crate tokio_core;
 extern crate toml;
+extern crate regex;
+#[macro_use]
+extern crate lazy_static;
 
-use clap::{Arg, App};
+
 use futures::Stream;
-use serde_json::{Value as SValue, Error};
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::prelude::*;
-use std::str;
-use tokio_core::reactor::Core;
 use telegram_bot::*;
-use toml::Value;
+use std::io::prelude::*;
+
+
+lazy_static! {
+    // NOTE: See https://regex101.com/r/P8zQTi/5
+    static ref CMD_REGEX: regex::Regex = regex::Regex::new(r"(?i)^/([a-z_]*)(?: (.*))?$").unwrap();
+}
+
+
+static ROOT_URL: &'static str = "http://thorium.bismuth.party";
+
+
+struct Config {
+    pub bot_token: String,
+
+    // NOTE: Should be merged with bot_token
+    pub api_token: String,
+}
 
 
 fn main() {
     // Clap CLI argument logic
-    let matches = App::new(env!("CARGO_PKG_NAME"))
-       .version(env!("CARGO_PKG_VERSION"))
-       .about(env!("CARGO_PKG_DESCRIPTION"))
-       .author(env!("CARGO_PKG_AUTHORS"))
+    let matches = clap::App::new(env!("CARGO_PKG_NAME"))
+        .version(env!("CARGO_PKG_VERSION"))
+        .about(env!("CARGO_PKG_DESCRIPTION"))
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .arg(
+            clap::Arg::with_name("config")
+                .short("c")
+                .long("config")
+                .value_name("FILE")
+                .help("Sets a custom config file")
+                .takes_value(true),
+        )
+        .get_matches();
 
-       .arg(Arg::with_name("config")
-            .short("c")
-            .long("config")
-            .value_name("FILE")
-            .help("Sets a custom config file")
-            .takes_value(true))
-
-       .get_matches();
-
-    // Loading the config based on a given path or a fixed path
+    // Load the config based on a given path or a fixed path
     let conf_path = matches.value_of("config").unwrap_or("config.toml");
-    let conf = load_config(conf_path).unwrap();
+    let conf = load_config_file(conf_path).unwrap();
 
+    // Extract token from config
     let token = conf["token"].as_str().unwrap();
-    println!("Token: {}", token);
 
-    let mut core = Core::new().unwrap();
+    // Prepare bot
+    let mut core = tokio_core::reactor::Core::new().unwrap();
+    let api = Api::configure(token).build(core.handle()).unwrap();
 
-    let api = Api::configure(token)
-        .build(core.handle())
-        .unwrap();
+    // Create global config struct to keep track of the token(s),
+    // since we'll need it/them in backend API calls
+    let config = Config {
+        bot_token: token.to_string(),
 
-    // Fetch new updates via long poll method
+        // NOTE: Should be merged with bot_token
+        api_token: "abcdef".to_string(),
+    };
+
+    // Get and handle all updates (long-polling)
     let future = api.stream().for_each(|update| {
-
-        // If the received update contains a new message...
-        if let UpdateKind::Message(message) = update.kind {
-
-            if let MessageKind::Text {ref data, ..} = message.kind {
-                // Print received text message to stdout.
-                handle_text(&message);
-
-                if data.as_str() == "/info" {
-                    api.spawn(message.text_reply(
-                        format!("userid: {}\nchatid: {}", &message.from.id, &message.chat.id())
-                    ));
-                } else if data.as_str() == "/token" {
-                    let id = format!("{}", message.from.id);
-
-                    let chat = ChatId::new(id.parse().unwrap());
-                    api.spawn(chat.text(
-                        format!("token: {}", get_token(message.from.id).as_str())
-                    ));
-
-                    api.spawn(message.text_reply(
-                        format!("token: {}", get_token(message.from.id).as_str())
-                    ));
-
-                } else if data.as_str().starts_with("/echo") {
-                    api.spawn(message.text_reply(
-                        format!("{}", &data["/echo".len()..])
-                        ).parse_mode(ParseMode::Markdown)
-                    );
-                }
-            } else if let MessageKind::NewChatTitle {ref data, ..} = message.kind {
-                handle_new_title(&message);
-            }
-        }
-
+        handle_update(&config, &api, update);
         Ok(())
     });
 
+    // Start bot
     core.run(future).unwrap();
 }
 
 
-fn load_config(config_path: &str) -> Option<Value> {
-    let mut f = File::open(config_path).expect("No config found!");
+fn load_config_file(config_path: &str) -> Result<toml::Value, toml::de::Error> {
+    let mut file = std::fs::File::open(config_path)
+        .expect("Invalid config path, does the config file exist?");
 
     let mut contents = String::new();
-    f.read_to_string(&mut contents).expect("Something went wrong reading the file");
+    file.read_to_string(&mut contents)
+        .expect("Something went wrong reading the file");
 
-    return contents.as_str().parse::<Value>().ok();
+    contents.as_str().parse()
 }
 
 
-fn get_token(userid: UserId) -> String {
-    let uri = format!("http://thorium.bismuth.party/abcdef/generate_token/{}", userid);
+/// Send a POST request to the specified URL with the specified data
+/// The URL should *NOT* start with a /
+fn post(url: &str, config: &Config, data: &serde_json::Value) -> serde_json::Value {
+    let uri = &format!("{}/{}/{}", ROOT_URL, config.api_token, url);
+    let res = reqwest::Client::new()
+        .post(uri)
+        .json(data)
+        .send().unwrap()
+        .text().unwrap();
 
-    let body = reqwest::get(uri.as_str())
-        .unwrap()
-        .text()
-        .unwrap();
+    // Parse response as JSON
+    let body = serde_json::from_str(&res).unwrap();
+    println!("post/body = {:?}", body);
 
-    let v: SValue = serde_json::from_str(body.as_str()).unwrap();
-
-    println!("body = {:?}", v);
-
-    return v["token"].to_string();
+    body
 }
 
 
-fn handle_text(message: &Message) {
-    let data = &message.kind.data;
+/// Send a GET request to the specified URL
+/// The URL should *NOT* start with a /
+fn get(url: &str, config: &Config) -> serde_json::Value {
+    let uri = &format!("{}/{}/{}", ROOT_URL, config.api_token, url);
+    let res = reqwest::Client::new()
+        .get(uri)
+        .send().unwrap()
+        .text().unwrap();
 
-    println!("<{}>: {}", message.from.first_name, data);
+    // Parse response as JSON
+    let body = serde_json::from_str(&res).unwrap();
+    println!("get/body = {:?}", body);
 
-    println!("{}", message.chat.id());
+    body
+}
 
-    let json = json!({
-        "chatid": message.chat.id(),
-        "userid": message.from.id,
-        "message": {
-            "type": 0,
-            "content": {
-                "text": data
-            }
+
+fn handle_update(config: &Config, api: &telegram_bot::Api, update: telegram_bot::Update) {
+    if let UpdateKind::Message(message) = update.kind {
+
+        match message.kind {
+            MessageKind::Text { .. } => {
+                handle_text(&config, &api, &message);
+            },
+
+            MessageKind::NewChatTitle { .. } => {
+                handle_title(&config, &api, &message);
+            },
+
+            // TODO: Add remaining MessageKinds
+            //       See https://github.com/telegram-rs/telegram-bot/blob/master/raw/src/types/message.rs#L83
+
+            _ => {
+                println!("\n\n\t\t!!!    unimplemented messagekind    !!!\n{:?}\n\n", message.kind);
+            },
         }
-    });
 
-    post_message(json);
+    }
 }
 
 
-fn handle_new_title(message: &Message) {
-    return
+fn handle_text(config: &Config, api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::Text { ref data, .. } = message.kind {
+        // Log message
+        println!("<{}>: {}", message.from.first_name, data);
+
+
+        // Extract command and arguments
+        if let Some(capt) = CMD_REGEX.captures(data) {
+            let cmd  = capt.get(1).map_or("", |m| m.as_str());
+            let args = capt.get(2).map_or("", |m| m.as_str());
+
+            println!("cmd: {:?}\nargs: {:?}", &cmd, &args);
+            handle_command(&config, &api, &message, &cmd, &args);
+        }
+
+
+        // Store message in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "userid": message.from.id,
+            "message": {
+                "type": 0,
+                "content": {
+                    "text": data,
+                },
+            },
+        });
+
+        post("message", &config, &json);
+    }
 }
 
 
-fn post_message(json: SValue) {
-    let client = reqwest::Client::new();
-    let res = client.post("http://thorium.bismuth.party/abcdef/message")
-        .json(&json)
-        .send()
-        .unwrap();
+fn handle_command(config: &Config, api: &telegram_bot::Api, message: &telegram_bot::Message, cmd: &str, args: &str) {
+    match cmd {
+        "info" => {
+            api.spawn(message.text_reply(format!(
+                "userid: {}\nchatid: {}",
+                message.from.id,
+                message.chat.id(),
+            )));
+        },
 
-    println!("{:?}", res);
+        "token" => {
+            let id = message.from.id;
 
+            // Let backend generate token
+            let body = get(&format!("generate_token/{}", id), &config);
+            let token = body["token"].to_string();
+
+            // Send to user in private
+            let chat = ChatId::from(id);
+            api.spawn(chat.text(format!("token: {}", token)));
+
+            // Reply to message (in group?)
+            // TODO: Remove for security purposes
+            api.spawn(message.text_reply(format!("token: {}", token)));
+        },
+
+        "echo" => {
+            api.spawn(message.text_reply(args).parse_mode(ParseMode::Markdown));
+        },
+
+        _ => {
+            println!("Unknown command {:?}", cmd);
+        },
+    }
+}
+
+
+fn handle_title(config: &Config, api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::NewChatTitle { ref data, .. } = message.kind {
+        // TODO: Store title in backend
+    }
 }
