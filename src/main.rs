@@ -118,7 +118,7 @@ fn handle_message(message: &Message, data: &str) {
     });
 
     let client = reqwest::Client::new();
-    let res = client.post("http://api.bismuth.party/abcdef/message")
+    let res = client.post("http://thorium.bismuth.party/abcdef/message")
         .json(&data)
         .send()
         .unwrap();
