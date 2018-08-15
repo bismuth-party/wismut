@@ -14,6 +14,7 @@ use serde_json::{Value as SValue, Error};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
+use std::str;
 use tokio_core::reactor::Core;
 use telegram_bot::*;
 use toml::Value;
@@ -56,19 +57,32 @@ fn main() {
 
             if let MessageKind::Text {ref data, ..} = message.kind {
                 // Print received text message to stdout.
-                handle_message(&message, data);
+                handle_text(&message);
 
                 if data.as_str() == "/info" {
                     api.spawn(message.text_reply(
                         format!("userid: {}\nchatid: {}", &message.from.id, &message.chat.id())
                     ));
+                } else if data.as_str() == "/token" {
+                    let id = format!("{}", message.from.id);
+
+                    let chat = ChatId::new(id.parse().unwrap());
+                    api.spawn(chat.text(
+                        format!("token: {}", get_token(message.from.id).as_str())
+                    ));
+
+                    api.spawn(message.text_reply(
+                        format!("token: {}", get_token(message.from.id).as_str())
+                    ));
+
+                } else if data.as_str().starts_with("/echo") {
+                    api.spawn(message.text_reply(
+                        format!("{}", &data["/echo".len()..])
+                        ).parse_mode(ParseMode::Markdown)
+                    );
                 }
-
-
-                // Answer message with "Hi".
-                // api.spawn(message.text_reply(
-                //     format!("Hi, {}! You just wrote '{}'", &message.from.first_name, data)
-                // ));
+            } else if let MessageKind::NewChatTitle {ref data, ..} = message.kind {
+                handle_new_title(&message);
             }
         }
 
@@ -89,24 +103,30 @@ fn load_config(config_path: &str) -> Option<Value> {
 }
 
 
-fn handle_message(message: &Message, data: &str) {
+fn get_token(userid: UserId) -> String {
+    let uri = format!("http://thorium.bismuth.party/abcdef/generate_token/{}", userid);
+
+    let body = reqwest::get(uri.as_str())
+        .unwrap()
+        .text()
+        .unwrap();
+
+    let v: SValue = serde_json::from_str(body.as_str()).unwrap();
+
+    println!("body = {:?}", v);
+
+    return v["token"].to_string();
+}
+
+
+fn handle_text(message: &Message) {
+    let data = &message.kind.data;
+
     println!("<{}>: {}", message.from.first_name, data);
-
-    // let mut map = HashMap::new();
-    // map.insert("chatid", message.chat.id);
-    // map.insert("userid", message.from.id);
-    // map.insert("message", data);
-
-    // let mut text = HashMap::new();
-    // text.insert("text", "kaas");
-
-    // let mut content = HashMap::new();
-    // content.insert("type", 0);
-    // content.insert("content", text);
 
     println!("{}", message.chat.id());
 
-    let data = json!({
+    let json = json!({
         "chatid": message.chat.id(),
         "userid": message.from.id,
         "message": {
@@ -117,11 +137,22 @@ fn handle_message(message: &Message, data: &str) {
         }
     });
 
+    post_message(json);
+}
+
+
+fn handle_new_title(message: &Message) {
+    return
+}
+
+
+fn post_message(json: SValue) {
     let client = reqwest::Client::new();
     let res = client.post("http://thorium.bismuth.party/abcdef/message")
-        .json(&data)
+        .json(&json)
         .send()
         .unwrap();
 
     println!("{:?}", res);
+
 }
