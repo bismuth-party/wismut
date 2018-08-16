@@ -170,7 +170,14 @@ fn handle_text(config: &Config, api: &telegram_bot::Api, message: &Message) {
         // Store message in backend
         let json = json!({
             "chatid": message.chat.id(),
-            "userid": message.from.id,
+            "user": {
+                "id": message.from.id,
+                "is_bot": false,
+                "first_name": message.from.first_name,
+                "last_name": message.from.last_name,
+                "username": message.from.username,
+                "language_code": "ding"
+            },
             "message": {
                 "type": 0,
                 "content": {
@@ -223,6 +230,21 @@ fn handle_command(config: &Config, api: &telegram_bot::Api, message: &telegram_b
 
 fn handle_title(config: &Config, api: &telegram_bot::Api, message: &Message) {
     if let MessageKind::NewChatTitle { ref data, .. } = message.kind {
-        // TODO: Store title in backend
+        // Store new title in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": {
+                "id": message.from.id,
+                "is_bot": false,
+                "first_name": message.from.first_name,
+                "last_name": message.from.last_name,
+                "username": message.from.username,
+                "language_code": "ding"
+            },
+            "title": data
+        });
+
+        post("chat_update/new_title", &config, &json);
+
     }
 }
