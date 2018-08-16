@@ -22,10 +22,9 @@ lazy_static! {
 }
 
 
-static ROOT_URL: &'static str = "http://thorium.bismuth.party";
-
-
 struct Config {
+    pub root_url: String,
+
     pub bot_token: String,
 
     // NOTE: Should be merged with bot_token
@@ -55,6 +54,7 @@ fn main() {
 
     // Extract token from config
     let token = conf["token"].as_str().unwrap();
+    let root_url = conf["root_url"].as_str().unwrap();
 
     // Prepare bot
     let mut core = tokio_core::reactor::Core::new().unwrap();
@@ -63,6 +63,8 @@ fn main() {
     // Create global config struct to keep track of the token(s),
     // since we'll need it/them in backend API calls
     let config = Config {
+        root_url: root_url.to_string(),
+
         bot_token: token.to_string(),
 
         // NOTE: Should be merged with bot_token
@@ -81,12 +83,13 @@ fn main() {
 
 
 fn load_config_file(config_path: &str) -> Result<toml::Value, toml::de::Error> {
-    let mut file = std::fs::File::open(config_path)
-        .expect("Invalid config path, does the config file exist?");
+    let file = std::fs::File::open(config_path);
+    let mut file = file.expect("Invalid config path, does the config file exist?");
 
     let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .expect("Something went wrong reading the file");
+    file.read_to_string(&mut contents).expect(
+        "Something went wrong reading the file",
+    );
 
     contents.as_str().parse()
 }
@@ -95,7 +98,7 @@ fn load_config_file(config_path: &str) -> Result<toml::Value, toml::de::Error> {
 /// Send a POST request to the specified URL with the specified data
 /// The URL should *NOT* start with a /
 fn post(url: &str, config: &Config, data: &serde_json::Value) -> serde_json::Value {
-    let uri = &format!("{}/{}/{}", ROOT_URL, config.api_token, url);
+    let uri = &format!("{}/{}/{}", config.root_url, config.api_token, url);
     let res = reqwest::Client::new()
         .post(uri)
         .json(data)
@@ -113,7 +116,7 @@ fn post(url: &str, config: &Config, data: &serde_json::Value) -> serde_json::Val
 /// Send a GET request to the specified URL
 /// The URL should *NOT* start with a /
 fn get(url: &str, config: &Config) -> serde_json::Value {
-    let uri = &format!("{}/{}/{}", ROOT_URL, config.api_token, url);
+    let uri = &format!("{}/{}/{}", config.root_url, config.api_token, url);
     let res = reqwest::Client::new()
         .get(uri)
         .send().unwrap()
@@ -128,16 +131,14 @@ fn get(url: &str, config: &Config) -> serde_json::Value {
 
 
 fn user_to_json(user: &telegram_bot::types::User) -> serde_json::Value {
-    let json = json!({
+    json!({
         "id": user.id,
         "is_bot": user.is_bot,
         "first_name": user.first_name,
         "last_name": user.last_name,
         "username": user.username,
-        "language_code": user.language_code
-    });
-
-    return json;
+        "language_code": user.language_code,
+    })
 }
 
 
@@ -146,23 +147,21 @@ fn handle_update(config: &Config, api: &telegram_bot::Api, update: telegram_bot:
         match message.kind {
             MessageKind::Text { .. } => {
                 handle_text(&config, &api, &message);
-            },
+            }
 
             MessageKind::Sticker { .. } => {
                 handle_sticker(&config, &api, &message);
-            },
-
+            }
 
             MessageKind::NewChatTitle { .. } => {
                 handle_title(&config, &api, &message);
-            },
+            }
 
             // TODO: Add remaining MessageKinds
             //       See https://github.com/telegram-rs/telegram-bot/blob/master/raw/src/types/message.rs#L83
-
             _ => {
                 println!("\n\n\t\t!!!    unimplemented messagekind    !!!\n{:?}\n\n", message.kind);
-            },
+            }
         }
     }
 }
@@ -176,7 +175,7 @@ fn handle_text(config: &Config, api: &telegram_bot::Api, message: &Message) {
 
         // Extract command and arguments
         if let Some(capt) = CMD_REGEX.captures(data) {
-            let cmd  = capt.get(1).map_or("", |m| m.as_str());
+            let cmd = capt.get(1).map_or("", |m| m.as_str());
             let args = capt.get(2).map_or("", |m| m.as_str());
 
             println!("cmd: {:?}\nargs: {:?}", &cmd, &args);
@@ -201,7 +200,13 @@ fn handle_text(config: &Config, api: &telegram_bot::Api, message: &Message) {
 }
 
 
-fn handle_command(config: &Config, api: &telegram_bot::Api, message: &telegram_bot::Message, cmd: &str, args: &str) {
+fn handle_command(
+    config: &Config,
+    api: &telegram_bot::Api,
+    message: &telegram_bot::Message,
+    cmd: &str,
+    args: &str,
+) {
     match cmd {
         "info" => {
             api.spawn(message.text_reply(format!(
@@ -209,7 +214,7 @@ fn handle_command(config: &Config, api: &telegram_bot::Api, message: &telegram_b
                 message.from.id,
                 message.chat.id(),
             )));
-        },
+        }
 
         "token" => {
             let id = message.from.id;
@@ -225,20 +230,20 @@ fn handle_command(config: &Config, api: &telegram_bot::Api, message: &telegram_b
             // Reply to message (in group?)
             // TODO: Remove for security purposes
             api.spawn(message.text_reply(format!("token: {}", token)));
-        },
+        }
 
         "echo" => {
             api.spawn(message.text_reply(args).parse_mode(ParseMode::Markdown));
-        },
+        }
 
         _ => {
             println!("Unknown command {:?}", cmd);
-        },
+        }
     }
 }
 
 
-fn handle_sticker(config: &Config, api: &telegram_bot::Api, message: &Message) {
+fn handle_sticker(config: &Config, _api: &telegram_bot::Api, message: &Message) {
     if let MessageKind::Sticker { ref data, .. } = message.kind {
         // Store sticker in backend
         let json = json!({
@@ -253,7 +258,6 @@ fn handle_sticker(config: &Config, api: &telegram_bot::Api, message: &Message) {
                     "file_size": data.file_size
                 },
             },
-
         });
 
         post("message", &config, &json);
@@ -262,7 +266,7 @@ fn handle_sticker(config: &Config, api: &telegram_bot::Api, message: &Message) {
 }
 
 
-fn handle_title(config: &Config, api: &telegram_bot::Api, message: &Message) {
+fn handle_title(config: &Config, _api: &telegram_bot::Api, message: &Message) {
     if let MessageKind::NewChatTitle { ref data, .. } = message.kind {
         // Store new title in backend
         let json = json!({
@@ -272,6 +276,5 @@ fn handle_title(config: &Config, api: &telegram_bot::Api, message: &Message) {
         });
 
         post("chat_update/new_title", &config, &json);
-
     }
 }
