@@ -127,6 +127,20 @@ fn get(url: &str, config: &Config) -> serde_json::Value {
 }
 
 
+fn user_to_json(user: &telegram_bot::types::User) -> serde_json::Value {
+    let json = json!({
+        "id": user.id,
+        "is_bot": user.is_bot,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "username": user.username,
+        "language_code": user.language_code
+    });
+
+    return json;
+}
+
+
 fn handle_update(config: &Config, api: &telegram_bot::Api, update: telegram_bot::Update) {
     if let UpdateKind::Message(message) = update.kind {
 
@@ -134,6 +148,11 @@ fn handle_update(config: &Config, api: &telegram_bot::Api, update: telegram_bot:
             MessageKind::Text { .. } => {
                 handle_text(&config, &api, &message);
             },
+
+            MessageKind::Sticker { .. } => {
+                handle_sticker(&config, &api, &message);
+            },
+
 
             MessageKind::NewChatTitle { .. } => {
                 handle_title(&config, &api, &message);
@@ -170,14 +189,7 @@ fn handle_text(config: &Config, api: &telegram_bot::Api, message: &Message) {
         // Store message in backend
         let json = json!({
             "chatid": message.chat.id(),
-            "user": {
-                "id": message.from.id,
-                "is_bot": false,
-                "first_name": message.from.first_name,
-                "last_name": message.from.last_name,
-                "username": message.from.username,
-                "language_code": "ding"
-            },
+            "user": user_to_json(&message.from),
             "message": {
                 "type": 0,
                 "content": {
@@ -228,19 +240,36 @@ fn handle_command(config: &Config, api: &telegram_bot::Api, message: &telegram_b
 }
 
 
+fn handle_sticker(config: &Config, api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::Sticker { ref data, .. } = message.kind {
+        // Store sticker in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": user_to_json(&message.from),
+            "message": {
+                "type": 6,
+                "content": {
+                    "file_id": data.file_id,
+                    "emoji": data.emoji,
+                    "set_name": data.set_name,
+                    "file_size": data.file_size
+                },
+            },
+
+        });
+
+        post("message", &config, &json);
+    }
+
+}
+
+
 fn handle_title(config: &Config, api: &telegram_bot::Api, message: &Message) {
     if let MessageKind::NewChatTitle { ref data, .. } = message.kind {
         // Store new title in backend
         let json = json!({
             "chatid": message.chat.id(),
-            "user": {
-                "id": message.from.id,
-                "is_bot": false,
-                "first_name": message.from.first_name,
-                "last_name": message.from.last_name,
-                "username": message.from.username,
-                "language_code": "ding"
-            },
+            "user": user_to_json(&message.from),
             "title": data
         });
 
