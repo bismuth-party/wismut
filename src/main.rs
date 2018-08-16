@@ -149,9 +149,47 @@ fn handle_update(config: &Config, api: &telegram_bot::Api, update: telegram_bot:
                 handle_text(&config, &api, &message);
             }
 
+            MessageKind::Audio { .. } => {
+                handle_audio(&config, &api, &message);
+            }
+
+            MessageKind::Document { .. } => {
+                handle_document(&config, &api, &message);
+            }
+
+            // TODO: animation
+
+            MessageKind::Photo { .. } => {
+                handle_photo(&config, &api, &message);
+            }
+
             MessageKind::Sticker { .. } => {
                 handle_sticker(&config, &api, &message);
             }
+
+            // MessageKind::Video { .. } => {
+            //     handle_text(&config, &api, &message);
+            // }
+
+            // MessageKind::Voice { .. } => {
+            //     handle_text(&config, &api, &message);
+            // }
+
+            // MessageKind::VideoNote { .. } => {
+            //     handle_text(&config, &api, &message);
+            // }
+
+            // MessageKind::Contact { .. } => {
+            //     handle_text(&config, &api, &message);
+            // }
+
+            // MessageKind::Location { .. } => {
+            //     handle_text(&config, &api, &message);
+            // }
+
+            // MessageKind::Venue { .. } => {
+            //     handle_text(&config, &api, &message);
+            // }
 
             MessageKind::NewChatTitle { .. } => {
                 handle_title(&config, &api, &message);
@@ -181,7 +219,6 @@ fn handle_text(config: &Config, api: &telegram_bot::Api, message: &Message) {
             println!("cmd: {:?}\nargs: {:?}", &cmd, &args);
             handle_command(&config, &api, &message, &cmd, &args);
         }
-
 
         // Store message in backend
         let json = json!({
@@ -243,6 +280,88 @@ fn handle_command(
 }
 
 
+fn handle_audio(config: &Config, _api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::Audio { ref data, .. } = message.kind {
+        // Store audio in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": user_to_json(&message.from),
+            "message": {
+                "type": 1,
+                "content": {
+                    "caption": "",
+                    "file_id": data.file_id,
+                    "duration": data.duration,
+                    "performer": data.performer,
+                    "title": data.title,
+                    "mime_type": data.mime_type,
+                    "file_size": data.file_size
+                },
+            },
+        });
+
+        post("message", &config, &json);
+    }
+}
+
+
+fn handle_document(config: &Config, _api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::Document { ref data, ref caption, .. } = message.kind {
+        // Store a document in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": user_to_json(&message.from),
+            "message": {
+                "type": 2,
+                "content": {
+                    "caption": caption,
+                    "file_id": data.file_id,
+                    "file_name": data.file_name,
+                    "mime_type": data.mime_type,
+                    "file_size": data.file_size
+                },
+            },
+        });
+
+        post("message", &config, &json);
+    }
+}
+
+
+fn handle_photo(config: &Config, _api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::Photo { ref data, ref caption, .. } = message.kind {
+        let mut p_data_json = Vec::new();
+        for photo in data {
+            let json = json!({
+                "file_id": photo.file_id,
+                "width": photo.width,
+                "height": photo.height,
+                "file_size": photo.file_size
+            });
+
+            p_data_json.push(json);
+        }
+
+
+        // Store a photo in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": user_to_json(&message.from),
+            "message": {
+                "type": 5,
+                "content": {
+                    "caption": caption,
+                    "photos": p_data_json
+                },
+            },
+        });
+
+        post("message", &config, &json);
+    }
+}
+
+
+
 fn handle_sticker(config: &Config, _api: &telegram_bot::Api, message: &Message) {
     if let MessageKind::Sticker { ref data, .. } = message.kind {
         // Store sticker in backend
@@ -262,7 +381,6 @@ fn handle_sticker(config: &Config, _api: &telegram_bot::Api, message: &Message) 
 
         post("message", &config, &json);
     }
-
 }
 
 
