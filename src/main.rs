@@ -153,7 +153,6 @@ fn handle_update(config: &Config, api: &telegram_bot::Api, update: telegram_bot:
                 handle_sticker(&config, &api, &message);
             },
 
-
             MessageKind::NewChatTitle { .. } => {
                 handle_title(&config, &api, &message);
             },
