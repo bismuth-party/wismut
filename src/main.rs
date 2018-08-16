@@ -143,7 +143,6 @@ fn user_to_json(user: &telegram_bot::types::User) -> serde_json::Value {
 
 fn handle_update(config: &Config, api: &telegram_bot::Api, update: telegram_bot::Update) {
     if let UpdateKind::Message(message) = update.kind {
-
         match message.kind {
             MessageKind::Text { .. } => {
                 handle_text(&config, &api, &message);
@@ -165,7 +164,6 @@ fn handle_update(config: &Config, api: &telegram_bot::Api, update: telegram_bot:
                 println!("\n\n\t\t!!!    unimplemented messagekind    !!!\n{:?}\n\n", message.kind);
             },
         }
-
     }
 }
 
