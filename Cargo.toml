@@ -8,6 +8,8 @@ description = "Telegram group statistics bot"
 clap = "2.32.0"
 futures = "0.1.23"
 reqwest = "0.8.7"
+serde = "1.0.26"
+serde_derive = "1.0.26"
 serde_json = "1.0.26"
 telegram-bot = { git = "https://github.com/bismuth-party/telegram-bot" }
 tokio-core = "0.1.17"
