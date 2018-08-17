@@ -2,6 +2,9 @@ extern crate clap;
 extern crate futures;
 extern crate reqwest;
 #[macro_use]
+extern crate serde_derive;
+extern crate serde;
+#[macro_use]
 extern crate serde_json;
 extern crate telegram_bot;
 extern crate tokio_core;
@@ -336,27 +339,48 @@ fn handle_photo(config: &Config, _api: &telegram_bot::Api, message: &Message) {
                 "file_id": photo.file_id,
                 "width": photo.width,
                 "height": photo.height,
-                "file_size": photo.file_size
+                "file_size": photo.file_size,
             });
 
             p_data_json.push(json);
         }
 
 
-        // Store a photo in backend
-        let json = json!({
-            "chatid": message.chat.id(),
-            "user": user_to_json(&message.from),
-            "message": {
-                "type": 5,
-                "content": {
-                    "caption": caption,
-                    "photos": p_data_json
+        #[derive(Serialize)]
+        struct Content {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            caption: Option<String>,
+            photo: serde_json::Value,
+        }
+
+        #[derive(Serialize)]
+        struct Message {
+            #[serde(rename = "type")]
+            _type: isize,
+            content: Content,
+        }
+
+        #[derive(Serialize)]
+        struct Body {
+            chatid: telegram_bot::ChatId,
+            user: serde_json::Value,
+            message: Message,
+        }
+
+
+        let body = Body {
+            chatid: message.chat.id(),
+            user: user_to_json(&message.from),
+            message: Message {
+                _type: 5,
+                content: Content {
+                    caption: caption.clone(),
+                    photo: p_data_json.get(0).unwrap().clone(),
                 },
             },
-        });
+        };
 
-        post("message", &config, &json);
+        post("message", &config, &json!(body));
     }
 }
 
