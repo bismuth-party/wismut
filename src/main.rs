@@ -167,13 +167,13 @@ fn handle_update(config: &Config, api: &telegram_bot::Api, update: telegram_bot:
                 handle_sticker(&config, &api, &message);
             }
 
-            // MessageKind::Video { .. } => {
-            //     handle_text(&config, &api, &message);
-            // }
+            MessageKind::Video { .. } => {
+                handle_video(&config, &api, &message);
+            }
 
-            // MessageKind::Voice { .. } => {
-            //     handle_text(&config, &api, &message);
-            // }
+            MessageKind::Voice { .. } => {
+                handle_voice(&config, &api, &message);
+            }
 
             // MessageKind::VideoNote { .. } => {
             //     handle_text(&config, &api, &message);
@@ -330,19 +330,8 @@ fn handle_document(config: &Config, _api: &telegram_bot::Api, message: &Message)
 
 fn handle_photo(config: &Config, _api: &telegram_bot::Api, message: &Message) {
     if let MessageKind::Photo { ref data, ref caption, .. } = message.kind {
-        let mut p_data_json = Vec::new();
-        for photo in data {
-            let json = json!({
-                "file_id": photo.file_id,
-                "width": photo.width,
-                "height": photo.height,
-                "file_size": photo.file_size
-            });
-
-            p_data_json.push(json);
-        }
-
-
+        let last = &data[data.len() - 1];
+        println!("{:?}", last);
         // Store a photo in backend
         let json = json!({
             "chatid": message.chat.id(),
@@ -350,8 +339,13 @@ fn handle_photo(config: &Config, _api: &telegram_bot::Api, message: &Message) {
             "message": {
                 "type": 5,
                 "content": {
-                    "caption": caption,
-                    "photos": p_data_json
+                    "caption": "",
+                    "photo": {
+                        "file_id": last.file_id,
+                        "width": last.width,
+                        "height": last.height,
+                        "file_size": last.file_size
+                    }
                 },
             },
         });
@@ -382,6 +376,53 @@ fn handle_sticker(config: &Config, _api: &telegram_bot::Api, message: &Message) 
         post("message", &config, &json);
     }
 }
+
+
+fn handle_video(config: &Config, _api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::Video { ref data, ref caption, .. } = message.kind {
+        // Store audio in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": user_to_json(&message.from),
+            "message": {
+                "type": 7,
+                "content": {
+                    "caption": caption,
+                    "file_id": data.file_id,
+                    "duration": data.duration,
+                    "mime_type": data.mime_type,
+                    "file_size": data.file_size
+                },
+            },
+        });
+
+        post("message", &config, &json);
+    }
+}
+
+
+fn handle_voice(config: &Config, _api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::Voice { ref data, .. } = message.kind {
+        // Store audio in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": user_to_json(&message.from),
+            "message": {
+                "type": 8,
+                "content": {
+                    "caption": "",
+                    "file_id": data.file_id,
+                    "duration": data.duration,
+                    "mime_type": data.mime_type,
+                    "file_size": data.file_size
+                },
+            },
+        });
+
+        post("message", &config, &json);
+    }
+}
+
 
 
 fn handle_title(config: &Config, _api: &telegram_bot::Api, message: &Message) {
