@@ -178,21 +178,21 @@ fn handle_update(config: &Config, api: &telegram_bot::Api, update: telegram_bot:
                 handle_voice(&config, &api, &message);
             }
 
-            // MessageKind::VideoNote { .. } => {
-            //     handle_text(&config, &api, &message);
-            // }
+            MessageKind::VideoNote { .. } => {
+                handle_video_note(&config, &api, &message);
+            }
 
-            // MessageKind::Contact { .. } => {
-            //     handle_text(&config, &api, &message);
-            // }
+            MessageKind::Contact { .. } => {
+                handle_contact(&config, &api, &message);
+            }
 
-            // MessageKind::Location { .. } => {
-            //     handle_text(&config, &api, &message);
-            // }
+            MessageKind::Location { .. } => {
+                handle_location(&config, &api, &message);
+            }
 
-            // MessageKind::Venue { .. } => {
-            //     handle_text(&config, &api, &message);
-            // }
+            MessageKind::Venue { .. } => {
+                handle_venue(&config, &api, &message);
+            }
 
             MessageKind::NewChatTitle { .. } => {
                 handle_title(&config, &api, &message);
@@ -453,6 +453,93 @@ fn handle_voice(config: &Config, _api: &telegram_bot::Api, message: &Message) {
     }
 }
 
+
+fn handle_video_note(config: &Config, _api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::VideoNote { ref data, .. } = message.kind {
+        // Store video note in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": user_to_json(&message.from),
+            "message": {
+                "type": 9,
+                "content": {
+                    "file_id": data.file_id,
+                    "duration": data.duration,
+                    "file_size": data.file_size
+                },
+            },
+        });
+
+        post("message", &config, &json);
+    }
+}
+
+
+fn handle_contact(config: &Config, _api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::Contact { ref data, .. } = message.kind {
+        // Store contact in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": user_to_json(&message.from),
+            "message": {
+                "type": 10,
+                "content": {
+                    "phone_number": data.phone_number,
+                    "first_name": data.first_name,
+                    "last_name": data.last_name,
+                    "user_id": data.user_id,
+                    "vcard": ""
+                },
+            },
+        });
+
+        post("message", &config, &json);
+    }
+}
+
+
+fn handle_location(config: &Config, _api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::Location { ref data, .. } = message.kind {
+        // Store location in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": user_to_json(&message.from),
+            "message": {
+                "type": 11,
+                "content": {
+                    "longitude": data.longitude,
+                    "latitude": data.latitude
+                },
+            },
+        });
+
+        post("message", &config, &json);
+    }
+}
+
+
+fn handle_venue(config: &Config, _api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::Venue { ref data, .. } = message.kind {
+        // Store venue in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": user_to_json(&message.from),
+            "message": {
+                "type": 12,
+                "content": {
+                    "location": {
+                        "longitude": data.location.longitude,
+                        "latitude": data.location.latitude
+                    },
+                    "title": data.title,
+                    "address": data.address
+                },
+            },
+        });
+
+        post("message", &config, &json);
+    }
+}
 
 
 fn handle_title(config: &Config, _api: &telegram_bot::Api, message: &Message) {
