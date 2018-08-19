@@ -27,6 +27,7 @@ lazy_static! {
 
 struct Config {
     pub root_url: String,
+    pub cobalt_root_url: String,
 
     pub bot_token: String,
 
@@ -58,6 +59,7 @@ fn main() {
     // Extract token from config
     let token = conf["token"].as_str().unwrap();
     let root_url = conf["root_url"].as_str().unwrap();
+    let cobalt_root_url = conf["cobalt_root_url"].as_str().unwrap();
 
     // Prepare bot
     let mut core = tokio_core::reactor::Core::new().unwrap();
@@ -67,6 +69,7 @@ fn main() {
     // since we'll need it/them in backend API calls
     let config = Config {
         root_url: root_url.to_string(),
+        cobalt_root_url: cobalt_root_url.to_string(),
 
         bot_token: token.to_string(),
 
@@ -257,23 +260,31 @@ fn handle_command(
         }
 
         "token" => {
-            let id = message.from.id;
-
-            // Let backend generate token
-            let body = get(&format!("generate_token/{}", id), &config);
-            let token = body["token"].to_string();
-
-            // Send to user in private
-            let chat = ChatId::from(id);
-            api.spawn(chat.text(format!("token: {}", token)));
-
-            // Reply to message (in group?)
-            // TODO: Remove for security purposes
-            api.spawn(message.text_reply(format!("token: {}", token)));
+            api.spawn(
+                message
+                    .text_reply("Click [here](t.me/wismut_bot?start=HELLOGIMMETOKENPLS) to get your token")
+                    .parse_mode(ParseMode::Markdown)
+            );
         }
 
         "echo" => {
             api.spawn(message.text_reply(args).parse_mode(ParseMode::Markdown));
+        }
+
+        "start" if args == "HELLOGIMMETOKENPLS" => {
+            let id = message.from.id;
+
+            // Let backend generate token
+            let body = get(&format!("generate_token/{}", id), &config);
+            let token = body["token"].as_str().unwrap();
+
+            // Send to user in private
+            let chat = ChatId::from(id);
+            api.spawn(
+                chat
+                    .text(format!("Click [here]({}/#{}) to go to the dashboard", config.cobalt_root_url, &token))
+                    .parse_mode(ParseMode::Markdown)
+            );
         }
 
         _ => {

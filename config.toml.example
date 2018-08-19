@@ -1,2 +1,3 @@
 token = "[TOKEN]"
 root_url = "http://thorium.bismuth.party"
+cobalt_root_url = "http://cobalt.bismuth.party"
