@@ -197,6 +197,14 @@ fn handle_update(config: &Config, api: &telegram_bot::Api, update: telegram_bot:
                 handle_venue(&config, &api, &message);
             }
 
+            MessageKind::NewChatMembers { .. } => {
+                handle_new_users(&config, &api, &message);
+            }
+
+            MessageKind::LeftChatMember { .. } => {
+                handle_left_user(&config, &api, &message);
+            }
+
             MessageKind::NewChatTitle { .. } => {
                 handle_title(&config, &api, &message);
             }
@@ -549,6 +557,36 @@ fn handle_venue(config: &Config, _api: &telegram_bot::Api, message: &Message) {
         });
 
         post("message", &config, &json);
+    }
+}
+
+
+fn handle_new_users(config: &Config, _api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::NewChatMembers { ref data, .. } = message.kind {
+        for user in data {
+           // Store user in backend
+            let json = json!({
+                "chatid": message.chat.id(),
+                "user": user_to_json(&message.from),
+                "newuser": user_to_json(user)
+            });
+
+            post("chat_update/new_member", &config, &json); 
+        }
+    }
+}
+
+
+fn handle_left_user(config: &Config, _api: &telegram_bot::Api, message: &Message) {
+    if let MessageKind::LeftChatMember { ref data, .. } = message.kind {
+        // Remove user in backend
+        let json = json!({
+            "chatid": message.chat.id(),
+            "user": user_to_json(&message.from),
+            "leftuser": user_to_json(data)
+        });
+
+        post("chat_update/left_member", &config, &json);
     }
 }
 
